@@ -1,60 +1,40 @@
-# Techla · Apify Billing MCP Bridge (bản mẫu đã kiểm thử không cần tài khoản thật)
+# Techla Spa · Apify Billing Bridge 0.4 — triển khai và nghiệm thu
 
-## Giải quyết vấn đề gì?
+**Đây là mã nguồn máy chủ MCP chỉ đọc, không tự chạy khi cập nhật plugin.** Nó không dùng chung token OAuth mà ChatGPT đã cấp cho Apify App.
 
-Cho ChatGPT truy vấn **usage, credit và hard limit** trên đúng tài khoản Apify qua API chính thức, không cần gửi screenshot Billing. Đây là **plugin phụ trợ mới** để đi cùng Apify Tools v2; không thay thế kết nối Apify đang dùng để chạy Actor.
+## Triển khai độc lập
 
-### API chính thức (chỉ đọc)
+Dùng nguồn `skills/apify-actors/assets/billing-bridge/` trong plugin, hoặc đồng bộ lên nhánh riêng của `HoangMinG-99/apify-mcp-server` (không ghi đè Apify MCP chính). Trên Render, tạo Docker Web Service, đặt root directory đúng thư mục chứa Dockerfile, chọn HTTPS và triển khai. Không được đánh dấu `DEPLOYED` trước khi URL `/health` thực sự trả lời.
 
-- `GET https://api.apify.com/v2/users/me`
-- `GET https://api.apify.com/v2/users/me/limits`
-- `GET https://api.apify.com/v2/users/me/usage/monthly`
+Qua secret manager của host (không qua chat) cấu hình:
 
-Tài liệu: https://docs.apify.com/api/v2/users-me-get; https://docs.apify.com/api/v2/users-me-limits-get; https://docs.apify.com/api/v2/users-me-usage-monthly-get
+- `MCP_ACCESS_TOKEN`: chuỗi ngẫu nhiên mạnh bảo vệ API `/mcp`.
+- `APIFY_TOKEN_HUNG`: token được ủy quyền cho tài khoản Apify muốn kiểm tra.
+- `APIFY_EXPECTED_USERNAME_HUNG`: username thật từ tài khoản Apify đó; không suy diễn từ tên nhãn GPT.
+- `APIFY_LINK_ID_HUNG`: ID kết nối Apify trong GPT đúng với tài khoản tương ứng.
+- `APIFY_ALLOW_PAID_USAGE=false`: mặc định chỉ cho phép xét phạm vi credit miễn phí. Chỉ thay đổi khi chính sách tài chính cho phép riêng, có ledger và hard cap.
 
-## Bảo mật
+Có thể thêm bộ biến môi trường tương tự cho tài khoản khác (`_KIN`, `_HUY`,...). Secrets các tài khoản được phân tách. Không sử dụng môi trường public logs để in access token; không đẩy `.env` thật lên GitHub.
 
-- **Không gửi hoặc lưu token Apify vào chat, Google Sheet, plugin skill hoặc GitHub.**
-- Kết nối một lần: thêm Apify API token vào bí mật của nơi triển khai (Render Environment Secrets). Token cần đủ quyền đọc thông tin tài khoản/usage; nếu 403 thì không chạy.
-- Cần thêm `MCP_ACCESS_TOKEN` riêng (chuỗi ngẫu nhiên đủ mạnh) để ChatGPT kết nối MCP. Cũng điền token này qua giao diện kết nối bảo mật, không gửi trong chat.
-- Mã không trả token, email hoặc thông tin nhạy cảm từ `/users/me`; chỉ trả `username`, usage và hạn mức.
-- Chỉ mở HTTPS trên tên miền triển khai. Không bật public MCP anonymous.
+Kết nối endpoint `https://<your-host>/mcp` vào công cụ MCP/Plugin qua giao diện có kiểm soát quyền, với header Bearer `MCP_ACCESS_TOKEN`. Không yêu cầu người dùng gửi token trong ChatGPT. Nếu chưa có app/host connector tương ứng, cần chủ tài khoản hoàn thành kết nối một lần trong giao diện quản trị.
 
-## Kích hoạt
+## Nghiệm thu thực (không chạy Actor)
 
-1. Triển khai source tới nơi có thể chạy Docker và HTTPS (ví dụ Render, không bắt buộc).
-2. Điền `MCP_ACCESS_TOKEN`, `APIFY_TOKEN_HUNG`, `APIFY_EXPECTED_USERNAME_HUNG` bằng secret manager. `APIFY_EXPECTED_USERNAME_HUNG` là **tên tài khoản Apify thật**, có thể khác nhãn kết nối `hùng` trong ChatGPT.
-3. Kết nối endpoint `https://<host>/mcp` qua plugin/MCP với API key là `MCP_ACCESS_TOKEN`. Không thêm MCP endpoint vào Apify Tools v2 hiện tại bằng một update App-backed: Plugin Creator không cho thay đổi app binding của plugin đó. Thêm như plugin bổ trợ hoặc cập nhật nguồn gốc của app server tương ứng.
-4. Gọi `get_apify_account_usage({"account":"hung","planned_usd":5,"phase_remaining_usd":5,"campaign_remaining_usd":40})`.
-5. Nếu `status=BLOCKED`, không chạy Actor. Nếu `PASS`, vẫn phải gắn hard cap cho từng Actor, giữ sổ chi phí giai đoạn/tổng chiến dịch và đọc lại usage sau run.
+1. `GET /health` phản hồi từ host đã triển khai, không chỉ từ môi trường test.
+2. `POST /mcp` không Bearer phải trả 401. Với Bearer hợp lệ, `initialize`, `tools/list` có `get_apify_account_usage` và `tools/call` chạy được.
+3. `get_apify_account_usage` nhận đủ `account`, `link_id`, `planned_usd`, `phase_remaining_usd`, `campaign_remaining_usd` và lấy dữ liệu thông qua API Apify. `phase_remaining_usd` / `campaign_remaining_usd` phải trích từ ledger đang được phê duyệt, không dùng ví dụ giả định.
+4. Xác minh `apify_username`, `verified_at`, `usage_cycle`, `monthly_hard_limit_usd`, `free_credit_remaining_estimate_usd`, kết quả PASS/BLOCKED và xử lý sai tài khoản.
+5. **Không dùng kết quả PASS như phê duyệt thanh toán.** Ngân sách giai đoạn/tổng cần được giữ và cập nhật ngoài API này. Chạy tuần tự hoặc dùng ledger có khóa giao dịch. Hard cap từng Actor phụ thuộc mô hình giá và phải được kiểm tra riêng.
+6. Chỉ khi live billing đạt mới được đề xuất kiểm thử Actor nhỏ với quyền của người dùng; phải có hậu kiểm actual cost, dataset, dedupe, CRM.
 
-## Phân biệt các khoản tiền
+## Kiểm thử mã nguồn offline
 
-- `used_this_cycle_usd`: số Apify ghi nhận đã dùng trong kỳ.
-- `free_credit_remaining_estimate_usd`: ước tính credit theo gói còn lại; có thể không phải số dư thanh toán do trợ giá/chính sách khác.
-- `hard_limit_remaining_usd`: trần chi tiêu còn lại theo cấu hình tài khoản; **không có nghĩa là tiền đã nạp**.
-- `bridge_available_allowance_usd`: giá trị nhỏ nhất của các giới hạn đã xác minh, bao gồm ngân sách từ Sheet. Mặc định chỉ cho phép phạm vi credit miễn phí; bật khả năng dùng phí trả thêm phải có chính sách tài chính rõ ràng.
+`pip install -r requirements.txt && python -m pytest -q test_server.py`
 
-## Tài khoản khác
+Các bài test sử dụng giả lập thông tin Apify, không chứng minh API token hoạt động hoặc host thực. Nếu host trả 401/403, kiểm tra token qua secret manager; tuyệt đối không đăng token trong chat.
 
-Thêm bộ secret `APIFY_TOKEN_<TÊN_NGẮN>`, `APIFY_EXPECTED_USERNAME_<TÊN_NGẮN>` và `APIFY_LINK_ID_<TÊN_NGẮN>`; tool nhận `account` theo tên ngắn viết thường không dấu, ví dụ `hung2`, `kin`, `huy`. Mỗi credential được xử lý tách biệt, không tự chuyển tài khoản.
+## Cảnh báo về hạn mức
 
-## Giới hạn hiện tại
+`monthly_hard_limit_usd` là giới hạn sử dụng, không phải số dư đã nạp. `monthly_plan_credit_usd` là credit trong plan; `free_credit_remaining_estimate_usd` là **ước lượng**, có thể khác số dư tín dụng thực tế trong Billing Console. Khi các nguồn usage không đồng nhất, cầu kết nối chọn `BLOCKED` (fail closed). API cầu chỉ đọc và không có khóa ngân sách; các Actor chạy đồng thời vẫn có thể gây vượt tổng ngân sách nếu không có cơ chế đặt chỗ thực.
 
-- Chưa triển khai dịch vụ lên host thực hoặc kết nối vào ChatGPT; chưa đọc tài khoản hùng thật.
-- Đây là cầu đọc usage. Nó **không chạy Actor**, **không tự chuyển Apify connection** và **không tự theo dõi các phiên chạy**.
-- Không thể kiểm định scope/token của hùng trước khi chủ tài khoản hoàn tất kết nối bí mật một lần.
-- Bộ kiểm thử sử dụng dữ liệu mẫu, không phát sinh phí Apify.
-
-
-## Cập nhật bảo mật phiên bản 0.2
-
-- Bắt buộc gửi `link_id` chính xác khi gọi `get_apify_account_usage`, đối chiếu với `APIFY_LINK_ID_<ALIAS>` được cấu hình trong secret manager. Nhãn `hung` không đủ để xác minh một kết nối.
-- Nếu chu kỳ sử dụng trả về không bao gồm thời điểm hiện tại, hệ thống từ chối cấp phép (`BILLING_CYCLE_STALE`).
-- Giá trị ngân sách âm, NaN, vô hạn hoặc thiếu trường sẽ bị từ chối.
-- Ví dụ với hùng: `get_apify_account_usage({"account":"hung","link_id":"link_6adad6d22e048191a1bca6794aaaed6f","planned_usd":5,"phase_remaining_usd":5,"campaign_remaining_usd":40})`.
-- Không có credential Apify thật trong mã nguồn, test hay bản ZIP.
-
-
-## Production status
-Nguồn GitHub là code chuẩn bị triển khai, KHÔNG phải máy chủ đã triển khai. Bắt buộc điền bí mật trong dashboard host, xác minh payload Billing thật, kiểm tra `tools/list` và `tools/call` trước khi chạy Actor có phí.
+Xem `references/remediation-v2.6.md` để hiểu kết quả nghiệm thu sau 2.5.1.
