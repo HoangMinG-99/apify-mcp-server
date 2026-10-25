@@ -1,9 +1,13 @@
+# Techla Spa Apify Billing Bridge – read-only service for a controlled trial.
+# This Blueprint lives at the repository root, but the app is isolated below.
+# Secrets must be provided ONLY in the Render dashboard during deployment.
 services:
   - type: web
     name: techla-apify-billing-mcp
-    env: docker
-    plan: starter
-    autoDeploy: false
+    runtime: docker
+    plan: free
+    rootDir: techla-billing-bridge
+    autoDeployTrigger: off
     healthCheckPath: /health
     envVars:
       - key: MCP_ACCESS_TOKEN
