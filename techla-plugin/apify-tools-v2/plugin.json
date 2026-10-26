@@ -1,0 +1,37 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "apify-tools-v2",
+  "version": "2.7.0",
+  "description": "Apify lead research workflows with an existing authorized Apify app and data-quality controls.",
+  "author": {
+    "name": "Techla AI Team",
+    "email": "techlaai.team@gmail.com"
+  },
+  "homepage": "https://apify.com",
+  "keywords": [
+    "apify",
+    "actors",
+    "web-scraping",
+    "research",
+    "dataset",
+    "budget",
+    "usage",
+    "billing"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Apify Tools v2",
+        "shortDescription": "Apify research & scraping",
+        "longDescription": "Find and inspect Apify Actors, run bounded scraping tasks with the linked authorized Apify app, retrieve datasets, filter duplicates, and prepare verified Techla Spa leads for Google Sheets.",
+        "developerName": "Techla AI Team",
+        "category": "Productivity",
+        "capabilities": [
+          "Read"
+        ],
+        "defaultPrompt": "Use the linked Apify app to find a suitable Actor, inspect its schema and price, and propose a bounded test without spending money until approved."
+      },
+      "apps": "./.app.json"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: techla-apify-billing-mcp
+    env: docker
+    plan: starter
+    autoDeploy: false
+    healthCheckPath: /health
+    envVars:
+      - key: MCP_ACCESS_TOKEN
+        sync: false
+      - key: APIFY_TOKEN_HUNG
+        sync: false
+      - key: APIFY_EXPECTED_USERNAME_HUNG
+        sync: false
+      - key: APIFY_LINK_ID_HUNG
+        value: link_6adad6d22e048191a1bca6794aaaed6f
+      - key: APIFY_ALLOW_PAID_USAGE
+        value: "false"
